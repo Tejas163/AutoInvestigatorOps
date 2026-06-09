@@ -1,0 +1,23 @@
+﻿{
+  "messages": [
+    {
+      "id": "01C5NJXXXXXX",
+      "event": "incident.triggered",
+      "created_at": "2026-06-09T10:45:00Z",
+      "incident": {
+        "id": "P5T9XYZ",
+        "incident_number": 1042,
+        "title": "CRITICAL: Redis Connection Timeout on payment-gateway-v2 - high error rate detected",
+        "created_at": "2026-06-09T10:44:56Z",
+        "status": "triggered",
+        "urgency": "high",
+        "html_url": "https://your-org.pagerduty.com/incidents/P5T9XYZ",
+        "service": {
+          "id": "PI56ABC",
+          "summary": "payment-gateway-v2",
+          "html_url": "https://your-org.pagerduty.com/services/PI56ABC"
+        }
+      }
+    }
+  ]
+}

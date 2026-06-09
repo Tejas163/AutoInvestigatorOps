@@ -1,0 +1,16 @@
+# Virtual Environment folders
+.venv/
+venv/
+ENV/
+
+# Local sensitive configuration secrets
+.env
+
+# Local database caches and dependencies
+.chroma/
+__pycache__/
+*.pyc
+
+# Mock production files and generated active scripts
+production_logs.txt
+remediate.ps1
