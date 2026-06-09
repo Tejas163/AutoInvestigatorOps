@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, cast
-from pipeline import investigation_engine
 from dotenv import load_dotenv # This pulls variables from your .env file into os.environ
 load_dotenv() 
+from pipeline import investigation_engine
+from schemas import InvestigationState
 import logging
 
 # Configure logging for production visibility
@@ -56,12 +57,15 @@ def trigger_agent_investigation(extracted_context: Dict[str, Any]):
     final_output_state = investigation_engine.invoke(extracted_context) # pyright: ignore[reportArgumentType]
 
     # NEW EXPANDED LOGGING BLOCK
+    # Updated logging display inside investigator.py background worker
     summary = final_output_state.get("root_cause_summary", {})
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print(f"🔴 ROOT CAUSE      : {summary.get('root_cause')}")
-    print(f"🎯 CONFIDENCE SCORE: {summary.get('confidence_score') * 100}%")
     print(f"🛠️  REMEDIATION STEP: {summary.get('recommended_action')}")
-    print("="*50 + "\n")
+    print(f"💻 AI GENERATED FIX: {summary.get('target_script')}")
+    print(f"🚀 EXECUTED STATUS : {final_output_state.get('remediation_executed')}")
+    print(f"📋 SYSTEM RESPONSE :\n{final_output_state.get('remediation_logs')}")
+    print("="*60 + "\n")
 # ==========================================
 # 3. WEBHOOK ENDPOINT
 # ==========================================
@@ -84,21 +88,29 @@ async def handle_pagerduty_webhook(
         incident = message.incident
         
         # Flatten and extract only the meat of the alert for the LLM
-        extracted_context = {
+        # Inside investigator.py (Update the trigger dictionary function)
+        extracted_context: InvestigationState = {
             "incident_id": incident.id,
             "incident_number": incident.incident_number,
             "title": incident.title,
             "status": incident.status,
             "urgency": incident.urgency,
-            "service_name": incident.service.summary,
-            "service_id": incident.service.id,
+            "service_name": incident.service.summary if incident.service else "unknown-service",
+            "service_id": incident.service.id if incident.service else "none",
             "pdr_url": incident.html_url,
             "triggered_at": incident.created_at,
-            # Placeholders for data elements our LangGraph nodes will soon enrich
             "service_dependencies": [],
             "relevant_logs": [],
             "metric_anomalies": [],
-            "historical_matches": []
+            "historical_matches": [],
+            "next_step": "triage_alert",
+            "investigation_steps_taken": [],
+            "root_cause_summary": {},
+            # CONTROL SWITCH: Flip this to True to weaponize execution!
+            # In a full app, this will map to an incoming query string or body parameter like ?approve=true
+            "remediation_approved": True, 
+            "remediation_executed": False,
+            "remediation_logs": ""
         }
         
         logger.info(f"Validated incident {incident.id} received for service '{incident.service.summary}'")

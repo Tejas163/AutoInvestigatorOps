@@ -1,6 +1,5 @@
 # schemas.py
 from typing import List, Dict, Any, TypedDict
-
 class InvestigationState(TypedDict):
     incident_id: str
     incident_number: int
@@ -18,3 +17,8 @@ class InvestigationState(TypedDict):
     next_step: str
     investigation_steps_taken: List[str]
     root_cause_summary: Dict[str, Any]
+    
+    # NEW FIELDS FOR WEAPONIZATION
+    remediation_approved: bool    # Set to True when a human approves the action
+    remediation_executed: bool    # Tracks if the script finished running
+    remediation_logs: str         # Captures the standard output of the fix script
