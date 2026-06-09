@@ -21,7 +21,7 @@ The system is built entirely out of lightweight, open-source, and free-to-run co
 
 ### 1. Clone & Set Up the Virtual Environment
 ```powershell
-git clone [https://github.com/your-username/AutoInvestigatorOps.git](https://github.com/your-username/AutoInvestigatorOps.git)
+git clone (https://github.com/Tejas163/AutoInvestigatorOps.git)
 cd AutoInvestigatorOps
 
 # Create and activate virtual environment
