@@ -6,13 +6,49 @@ load_dotenv()
 from pipeline import investigation_engine
 from schemas import InvestigationState
 import logging
-
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import Counter, Histogram, Gauge
+import time
 # Configure logging for production visibility
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("incident_webhook")
 
-app = FastAPI(title="Autonomous Investigator - Inbound Webhook", version="1.0.0")
+# Counts total incidents received
+INCIDENTS_RECEIVED = Counter(
+    "sre_incidents_received_total",
+    "Total number of PagerDuty incidents received",
+    ["urgency", "service_name"]
+)
 
+# Counts remediation outcomes
+REMEDIATION_OUTCOMES = Counter(
+    "sre_remediation_outcomes_total",
+    "Total remediation attempts and their outcomes",
+    ["status"]  # "success" or "failed"
+)
+
+# Tracks how long the full investigation takes
+INVESTIGATION_DURATION = Histogram(
+    "sre_investigation_duration_seconds",
+    "Time taken to complete full incident investigation",
+    buckets=[5, 10, 30, 60, 120, 300]
+)
+
+# Tracks LLM inference latency specifically
+LLM_INFERENCE_DURATION = Histogram(
+    "sre_llm_inference_duration_seconds",
+    "Time taken for LLM to synthesize root cause analysis",
+    buckets=[1, 2, 5, 10, 30, 60]
+)
+
+# Tracks active investigations in progress
+ACTIVE_INVESTIGATIONS = Gauge(
+    "sre_active_investigations",
+    "Number of investigations currently running"
+)
+
+app = FastAPI(title="Autonomous Investigator - Inbound Webhook", version="1.0.0")
+Instrumentator().instrument(app).expose(app)
 # ==========================================
 # 1. PYDANTIC SCHEMAS FOR VALIDATION
 # ==========================================
@@ -47,25 +83,50 @@ class PagerDutyWebhookPayload(BaseModel):
 # 2. CORE AGENT TRIGGER WORKFLOW (ASYNC)
 # ==========================================
 
-def trigger_agent_investigation(extracted_context: Dict[str, Any]):
+def trigger_agent_investigation(extracted_context):
     """
     Spawns the LangGraph state machine workflow.
+    Now with Prometheus metrics tracking.
     """
     logger.info(f"--- SPARKING AI INVESTIGATION FOR INCIDENT {extracted_context['incident_id']} ---")
 
-    # Pass the webhook payload right into the LangGraph state machine!
-    final_output_state = investigation_engine.invoke(extracted_context) # pyright: ignore[reportArgumentType]
+    # Track active investigations
+    ACTIVE_INVESTIGATIONS.inc()
 
-    # NEW EXPANDED LOGGING BLOCK
-    # Updated logging display inside investigator.py background worker
-    summary = final_output_state.get("root_cause_summary", {})
-    print("\n" + "="*60)
-    print(f"🔴 ROOT CAUSE      : {summary.get('root_cause')}")
-    print(f"🛠️  REMEDIATION STEP: {summary.get('recommended_action')}")
-    print(f"💻 AI GENERATED FIX: {summary.get('target_script')}")
-    print(f"🚀 EXECUTED STATUS : {final_output_state.get('remediation_executed')}")
-    print(f"📋 SYSTEM RESPONSE :\n{final_output_state.get('remediation_logs')}")
-    print("="*60 + "\n")
+    # Start timing the full investigation
+    investigation_start = time.time()
+
+    try:
+        final_output_state = investigation_engine.invoke(extracted_context)
+
+        # Record investigation duration
+        investigation_duration = time.time() - investigation_start
+        INVESTIGATION_DURATION.observe(investigation_duration)
+
+        # Track remediation outcome
+        if final_output_state.get("remediation_executed"):
+            REMEDIATION_OUTCOMES.labels(status="success").inc()
+        else:
+            REMEDIATION_OUTCOMES.labels(status="skipped").inc()
+
+        # Log output as before
+        summary = final_output_state.get("root_cause_summary", {})
+        print("\n" + "="*60)
+        print(f"🔴 ROOT CAUSE      : {summary.get('root_cause')}")
+        print(f"🛠️  REMEDIATION STEP: {summary.get('recommended_action')}")
+        print(f"💻 AI GENERATED FIX: {summary.get('target_script')}")
+        print(f"🚀 EXECUTED STATUS : {final_output_state.get('remediation_executed')}")
+        print(f"📋 SYSTEM RESPONSE :\n{final_output_state.get('remediation_logs')}")
+        print(f"⏱️  DURATION        : {investigation_duration:.2f}s")
+        print("="*60 + "\n")
+
+    except Exception as e:
+        REMEDIATION_OUTCOMES.labels(status="failed").inc()
+        logger.error(f"Investigation failed for incident {extracted_context['incident_id']}: {e}")
+
+    finally:
+        # Always decrement active investigations
+        ACTIVE_INVESTIGATIONS.dec()
 # ==========================================
 # 3. WEBHOOK ENDPOINT
 # ==========================================
@@ -86,10 +147,14 @@ async def handle_pagerduty_webhook(
             continue
             
         incident = message.incident
+        INCIDENTS_RECEIVED.labels(
+            urgency=incident.urgency,
+            service_name=incident.service.summary if incident.service else "unknown"
+        ).inc()
         
         # Flatten and extract only the meat of the alert for the LLM
         # Inside investigator.py (Update the trigger dictionary function)
-        extracted_context: InvestigationState = {
+        extracted_context = {
             "incident_id": incident.id,
             "incident_number": incident.incident_number,
             "title": incident.title,
@@ -106,9 +171,7 @@ async def handle_pagerduty_webhook(
             "next_step": "triage_alert",
             "investigation_steps_taken": [],
             "root_cause_summary": {},
-            # CONTROL SWITCH: Flip this to True to weaponize execution!
-            # In a full app, this will map to an incoming query string or body parameter like ?approve=true
-            "remediation_approved": True, 
+            "remediation_approved": True,
             "remediation_executed": False,
             "remediation_logs": ""
         }

@@ -1,0 +1,46 @@
+services:
+
+  # Your SRE Agent
+  sre-agent:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - SRE_AGENT_LLM_URL=${SRE_AGENT_LLM_URL}
+      - SRE_AGENT_LLM_KEY=${SRE_AGENT_LLM_KEY}
+    networks:
+      - monitoring
+
+  # Prometheus — scrapes metrics from your SRE agent
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring
+    depends_on:
+      - sre-agent
+
+  # Grafana — visualises Prometheus metrics
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  grafana-storage:

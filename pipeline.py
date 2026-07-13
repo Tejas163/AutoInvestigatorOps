@@ -10,7 +10,14 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 load_dotenv()
+from prometheus_client import Histogram
+import time
 
+LLM_INFERENCE_DURATION = Histogram(
+    "sre_llm_inference_duration_seconds",
+    "Time taken for LLM to synthesize root cause analysis",
+    buckets=[1, 2, 5, 10, 30, 60]
+)
 # Initialize local LLM and Vector Engine
 SRE_AGENT_LLM_URL = os.getenv("SRE_AGENT_LLM_URL")
 SRE_AGENT_LLM_KEY = os.getenv("SRE_AGENT_LLM_KEY")
@@ -58,14 +65,14 @@ def search_runbooks_node(state: InvestigationState) -> Dict[str, Any]:
 # ==================================================
 # RCA NODE WITH EXPLICIT ENFORCED SCRIPT COMMAND OUTPUT
 # ==================================================
-def synthesize_rca_node(state: InvestigationState) -> Dict[str, Any]:
+def synthesize_rca_node(state: InvestigationState):
     print(f"[NODE - RCA Synthesizer]: Parsing system context with LFM-2b...")
     logs_context = "\n".join(state.get("relevant_logs", []))
     metrics_context = str(state.get("metric_anomalies", []))
     history = state.get("historical_matches", [])
     runbook_instructions = history[0]["runbook_text"] if history else ""
-    
-    prompt = f"""You are an SRE AI Agent. Analyze the telemetry and provide an RCA JSON. 
+
+    prompt = f"""You are an SRE AI Agent. Analyze the telemetry and provide an RCA JSON.
     You must include an exact script string matching the instructions for remediation.
 
     RUNBOOK DIRECTIONS:
@@ -75,61 +82,36 @@ def synthesize_rca_node(state: InvestigationState) -> Dict[str, Any]:
 
     Return a raw JSON object only.
     EXAMPLE FORMAT:
-    {{"root_cause": "Reason", "confidence_score": 0.95, "recommended_action": "Run fix", "target_script": "Write a powershell command here matching runbook like: Write-Output 'Flushing connection pools...'"}}
+    {{"root_cause": "Reason", "confidence_score": 0.95, "recommended_action": "Run fix", 
+    "target_script": "Write a powershell command here matching runbook"}}
     """
 
+    # Track LLM inference time specifically
+    llm_start = time.time()
     try:
         ai_response = llm.invoke(prompt)
+        llm_duration = time.time() - llm_start
+        LLM_INFERENCE_DURATION.observe(llm_duration)
+        print(f"[METRICS]: LLM inference completed in {llm_duration:.2f}s")
+
         raw_content = ai_response.content.strip().strip("```json").strip("```").strip()
         import json
         summary = json.loads(raw_content)
+
     except Exception as e:
-        summary = {"root_cause": "Parsing failed", "confidence_score": 0.5, "recommended_action": "Manual check", "target_script": "Write-Output 'Error'"}
+        llm_duration = time.time() - llm_start
+        LLM_INFERENCE_DURATION.observe(llm_duration)
+        summary = {
+            "root_cause": "Parsing failed",
+            "confidence_score": 0.5,
+            "recommended_action": "Manual check",
+            "target_script": "Write-Output 'Error'"
+        }
 
     return {
         "root_cause_summary": summary,
         "investigation_steps_taken": state["investigation_steps_taken"] + ["synthesized_rca"],
-        # Decide next node based on human approval state!
         "next_step": "execute_remediation" if state.get("remediation_approved") else "end"
-    }
-
-
-# ==================================================
-# NEW NODE: EXECUTING SAFE PRODUCTION REMEDIATION 
-# ==================================================
-def execute_remediation_node(state: InvestigationState) -> Dict[str, Any]:
-    print(f"[NODE - Execution Engine]: 🚀 Remediation approved! Compiling target orchestration payload...")
-    
-    summary = state.get("root_cause_summary", {})
-    script_command = summary.get("target_script", "Write-Output 'No script generated.'")
-    
-    script_file = "remediate.ps1"
-    print(f"[NODE - Execution Engine]: Writing dynamic run-actions into '{script_file}'")
-    
-    # Write the AI's generated remediation script safely to the local filesystem
-    with open(script_file, "w", encoding="utf-8") as f:
-        f.write(f"# Auto-Generated SRE Action Script\n")
-        f.write(f"{script_command}\n")
-        f.write(f"Write-Output 'Auto-Remediation step successfully completed on cluster.'\n")
-        
-    try:
-        print(f"[NODE - Execution Engine]: Invoking PowerShell subprocess worker safely...")
-        # Execute the generated shell script using native Python process handles
-        result = subprocess.run(
-            ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_file],
-            capture_output=True, text=True, check=True
-        )
-        execution_output = result.stdout
-        print(f"[SUCCESS]: Script ran cleanly.")
-    except Exception as e:
-        execution_output = f"Execution failed: {str(e)}"
-        print(f"[CRITICAL ERROR]: Remediation script failed to execute: {e}")
-
-    return {
-        "remediation_executed": True,
-        "remediation_logs": execution_output.strip(),
-        "investigation_steps_taken": state["investigation_steps_taken"] + ["executed_remediation"],
-        "next_step": "end"
     }
 
 
