@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, cast
-from dotenv import load_dotenv # This pulls variables from your .env file into os.environ
+from dotenv import load_dotenv
+import uvicorn # This pulls variables from your .env file into os.environ
 load_dotenv() 
-from pipeline import investigation_engine
+from pipeline import investigation_engine, LLM_INFERENCE_DURATION
 from schemas import InvestigationState
 import logging
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -34,12 +35,6 @@ INVESTIGATION_DURATION = Histogram(
     buckets=[5, 10, 30, 60, 120, 300]
 )
 
-# Tracks LLM inference latency specifically
-LLM_INFERENCE_DURATION = Histogram(
-    "sre_llm_inference_duration_seconds",
-    "Time taken for LLM to synthesize root cause analysis",
-    buckets=[1, 2, 5, 10, 30, 60]
-)
 
 # Tracks active investigations in progress
 ACTIVE_INVESTIGATIONS = Gauge(
@@ -182,3 +177,7 @@ async def handle_pagerduty_webhook(
         background_tasks.add_task(trigger_agent_investigation, extracted_context)
 
     return {"status": "accepted", "message": "Trigger events queued for investigation"}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

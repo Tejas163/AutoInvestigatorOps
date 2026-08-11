@@ -1,5 +1,6 @@
 # schemas.py
-from typing import List, Dict, Any, TypedDict
+import operator
+from typing import Annotated, List, Dict, Any, TypedDict
 class InvestigationState(TypedDict):
     incident_id: str
     incident_number: int
@@ -11,12 +12,14 @@ class InvestigationState(TypedDict):
     pdr_url: str
     triggered_at: str
     service_dependencies: List[str]
-    relevant_logs: List[str]
-    metric_anomalies: List[Dict[str, Any]]
-    historical_matches: List[Dict[str, Any]]
     next_step: str
-    investigation_steps_taken: List[str]
     root_cause_summary: Dict[str, Any]
+
+    # Reducers aggregate data from parallel branches instead of overwriting
+    relevant_logs: Annotated[List[str], operator.add]
+    metric_anomalies: Annotated[List[Dict[str, Any]], operator.add]
+    historical_matches: Annotated[List[Dict[str, Any]], operator.add]
+    investigation_steps_taken: Annotated[List[str], operator.add]
     
     # NEW FIELDS FOR WEAPONIZATION
     remediation_approved: bool    # Set to True when a human approves the action
