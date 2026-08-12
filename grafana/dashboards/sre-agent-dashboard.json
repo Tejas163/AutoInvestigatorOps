@@ -1,0 +1,200 @@
+{
+  "title": "SRE Agent Dashboard",
+  "uid": "sre-agent",
+  "tags": ["sre", "agent"],
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "title": "Active Investigations",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [{
+        "expr": "sre_active_investigations",
+        "legendFormat": "Active",
+        "refId": "A"
+      }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "color": "green", "value": null }] },
+          "unit": "none",
+          "min": 0
+        }
+      }
+    },
+    {
+      "title": "Incidents Received (rate)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 6, "y": 0 },
+      "targets": [{
+        "expr": "rate(sre_incidents_received_total[5m])",
+        "legendFormat": "{{urgency}} - {{service_name}}",
+        "refId": "A"
+      }],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "Remediation Outcomes (total)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 6 },
+      "targets": [{
+        "expr": "sum(sre_remediation_outcomes_total)",
+        "legendFormat": "Total",
+        "refId": "A"
+      }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "title": "Remediation Outcomes by Status",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 6 },
+      "targets": [{
+        "expr": "sre_remediation_outcomes_total",
+        "legendFormat": "{{status}}",
+        "refId": "A"
+      }],
+      "options": {
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "red", "value": null },
+            { "color": "orange", "value": 1 },
+            { "color": "green", "value": 5 }
+          ]},
+          "unit": "none"
+        }
+      }
+    },
+    {
+      "title": "Investigation Duration (p99)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 6 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, rate(sre_investigation_duration_seconds_bucket[5m]))",
+        "legendFormat": "p99",
+        "refId": "A"
+      }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 30 },
+            { "color": "red", "value": 60 }
+          ]},
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "LLM Inference Duration (p99)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 6 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, rate(sre_llm_inference_duration_seconds_bucket[5m]))",
+        "legendFormat": "p99",
+        "refId": "A"
+      }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "values": false },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 10 },
+            { "color": "red", "value": 30 }
+          ]},
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "title": "Investigation Duration (histogram)",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [{
+        "expr": "rate(sre_investigation_duration_seconds_bucket[5m])",
+        "format": "heatmap",
+        "legendFormat": "{{le}}",
+        "refId": "A"
+      }],
+      "options": {
+        "calculate": false,
+        "yAxis": { "unit": "s" }
+      }
+    },
+    {
+      "title": "HTTP Requests (rate)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [{
+        "expr": "rate(http_requests_total[5m])",
+        "legendFormat": "{{method}} {{handler}}",
+        "refId": "A"
+      }],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "title": "HTTP Request Duration (p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))",
+        "legendFormat": "{{handler}}",
+        "refId": "A"
+      }],
+      "options": {
+        "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "right" },
+        "tooltip": { "mode": "multi" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    }
+  ]
+}

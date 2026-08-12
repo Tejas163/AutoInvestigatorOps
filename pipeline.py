@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph, END
 from schemas import InvestigationState
 from langchain_openai import ChatOpenAI
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_core.documents import Document
 from dotenv import load_dotenv
 from prometheus_client import Histogram
@@ -39,7 +39,7 @@ llm = ChatOpenAI(
     callbacks=[langfuse_handler]  # Attach Langfuse to LLM instances
 )
 
-embedding_engine = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embedding_engine = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 vector_db = Chroma(embedding_function=embedding_engine)
 # Seed runbooks into vector store on startup
 runbook_path = os.path.join("runbooks", "redis_runbook.md")

@@ -29,10 +29,12 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin!123
       - GF_SECURITY_ADMIN_USER=admin
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     networks:
       - monitoring
     depends_on:
